@@ -10,25 +10,46 @@ include '../includes/header.php';
 
 $message = "";
 
-// Fetch all users
-$users = $conn->query("SELECT id, name FROM users");
+// Fetch users
+$users = [];
+$userQuery = $conn->query("SELECT id, name FROM users");
+while ($user = $userQuery->fetch_assoc()) {
+    $users[] = $user;
+}
 
-// Fetch all categories and their subcategories
-$categories = $conn->query("SELECT * FROM categories");
+// Fetch categories and their subcategories
+$categories = [];
+$categoryQuery = $conn->query("SELECT c.id AS category_id, c.category_name, s.id AS subcategory_id, s.subcategory_name 
+                               FROM categories c 
+                               LEFT JOIN subcategories s ON c.id = s.category_id 
+                               ORDER BY c.category_name, s.subcategory_name");
+while ($row = $categoryQuery->fetch_assoc()) {
+    $categories[$row['category_id']]['name'] = $row['category_name'];
+    if ($row['subcategory_id']) {
+        $categories[$row['category_id']]['subcategories'][] = [
+            'id' => $row['subcategory_id'],
+            'name' => $row['subcategory_name']
+        ];
+    }
+}
 
-// Handle form submission (Assign subcategories)
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['assign_subcategories'])) {
+// Handle subcategory assignment
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['assign_subcategories'])) {
     $user_id = $_POST["user_id"];
     $selected_subcategories = $_POST["subcategories"] ?? [];
 
     // Remove existing assignments
-    $conn->query("DELETE FROM profile_subcategories WHERE user_id = $user_id");
+    $stmt = $conn->prepare("DELETE FROM profile_subcategories WHERE user_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
 
     // Insert new assignments
-    foreach ($selected_subcategories as $subcategory_id) {
+    if (!empty($selected_subcategories)) {
         $stmt = $conn->prepare("INSERT INTO profile_subcategories (user_id, subcategory_id) VALUES (?, ?)");
-        $stmt->bind_param("ii", $user_id, $subcategory_id);
-        $stmt->execute();
+        foreach ($selected_subcategories as $subcategory_id) {
+            $stmt->bind_param("ii", $user_id, $subcategory_id);
+            $stmt->execute();
+        }
     }
 
     $message = "<div class='alert alert-success'>Subcategories assigned successfully!</div>";
@@ -44,29 +65,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['assign_subcategories']
             <label class="form-label">Select User</label>
             <select name="user_id" class="form-control" required>
                 <option value="">Select a user</option>
-                <?php while ($user = $users->fetch_assoc()) : ?>
+                <?php foreach ($users as $user) : ?>
                     <option value="<?= $user['id'] ?>"><?= htmlspecialchars($user['name']) ?></option>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             </select>
         </div>
 
         <div class="mb-3">
             <label class="form-label">Select Subcategories</label>
             <div class="border p-3">
-                <?php
-                $subcategories = $conn->query("SELECT s.id, s.subcategory_name, c.category_name 
-                                               FROM subcategories s 
-                                               JOIN categories c ON s.category_id = c.id");
-
-                while ($row = $subcategories->fetch_assoc()) :
-                ?>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="subcategories[]" value="<?= $row['id'] ?>">
-                        <label class="form-check-label">
-                            <?= htmlspecialchars($row['subcategory_name']) ?> (<?= htmlspecialchars($row['category_name']) ?>)
-                        </label>
-                    </div>
-                <?php endwhile; ?>
+                <?php foreach ($categories as $category_id => $category) : ?>
+                    <strong><?= htmlspecialchars($category['name']) ?></strong>
+                    <?php if (!empty($category['subcategories'])) : ?>
+                        <div class="ms-3">
+                            <?php foreach ($category['subcategories'] as $subcategory) : ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="subcategories[]" value="<?= $subcategory['id'] ?>">
+                                    <label class="form-check-label">
+                                        <?= htmlspecialchars($subcategory['name']) ?>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else : ?>
+                        <p class="text-muted ms-3">No subcategories available</p>
+                    <?php endif; ?>
+                <?php endforeach; ?>
             </div>
         </div>
 
