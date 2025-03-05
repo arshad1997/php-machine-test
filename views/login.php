@@ -50,6 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <button type="submit" class="btn btn-success w-100">Login</button>
     </form>
     <p class="text-center mt-2">Don't have an account? <a href="register.php">Register here</a></p>
+    <p class="text-center mt-2">Forot Password? <a href="forgot_password.php">Click here</a></p>
 </div>
 
 <?php include '../includes/footer.php'; ?>
